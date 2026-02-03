@@ -4,19 +4,14 @@ module.exports = async (req, res) => {
   try {
     const { amount } = req.body;
 
-    if (!amount || amount <= 0) {
-      return res.status(400).json({ error: "Invalid amount" });
-    }
-
     const order = await razorpay.orders.create({
-      amount: amount * 100, // convert to paise
+      amount: amount * 100,
       currency: "INR",
-      receipt: `rcpt_${Date.now()}`, // ✅ fixed
+      receipt: `rcpt_${Date.now()}`,
     });
 
     res.json(order);
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: "Order creation failed" });
   }
 };
