@@ -13,9 +13,9 @@ const crypto = require("crypto");
 const Razorpay = require("razorpay");
 const cors = require("cors");
 
-/* ================= FIREBASE (FROM ADMIN FILE) ================= */
+/* ================= FIREBASE ================= */
 const { admin, db, rtdb } = require("./firebase/admin");
-const { Timestamp } = require("firebase-admin/firestore");
+const { Timestamp } = admin.firestore;
 
 /* ================= EXPRESS APP ================= */
 const app = express();
@@ -38,9 +38,6 @@ app.use(
   })
 );
 
-/* ⚠️ JSON parser (NOT for webhook) */
-app.use(express.json());
-
 /* ================= ENV CHECK ================= */
 if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
   console.error("❌ Razorpay backend ENV keys missing");
@@ -62,10 +59,63 @@ const razorpay = new Razorpay({
 
 /* ================= CONFIG ================= */
 const BOOKING_APPROVAL_MINUTES = 5;
-const STUDENT_CANCEL_MINUTES = 5;
 
 /* ================= AUTO SYSTEM LOCK ================= */
 let isRunning = false;
+
+/* ======================================================
+   🔔 RAZORPAY WEBHOOK (RAW BODY — MUST BE FIRST)
+====================================================== */
+app.post(
+  "/razorpay/webhook",
+  express.raw({ type: "application/json" }),
+  async (req, res) => {
+    try {
+      const signature = req.headers["x-razorpay-signature"];
+      const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+
+      const expectedSignature = crypto
+        .createHmac("sha256", secret)
+        .update(req.body)
+        .digest("hex");
+
+      if (signature !== expectedSignature) {
+        return res.status(400).send("Invalid signature");
+      }
+
+      const event = JSON.parse(req.body.toString());
+
+      if (event.event === "payment.captured") {
+        const payment = event.payload.payment.entity;
+
+        const snap = await db
+          .collection("bookingRequests")
+          .where("razorpayOrderId", "==", payment.order_id)
+          .get();
+
+        const batch = db.batch();
+
+        snap.forEach((doc) => {
+          batch.update(doc.ref, {
+            paymentStatus: "paid",
+            razorpayPaymentId: payment.id,
+            paidAt: Timestamp.now(),
+          });
+        });
+
+        await batch.commit();
+      }
+
+      res.json({ status: "ok" });
+    } catch (err) {
+      console.error("🔥 Webhook error:", err.message);
+      res.status(500).send("Webhook failed");
+    }
+  }
+);
+
+/* ⚠️ JSON parser — AFTER webhook */
+app.use(express.json());
 
 /* ======================================================
    💳 CREATE RAZORPAY ORDER
@@ -92,7 +142,7 @@ app.post("/razorpay/create-order", async (req, res) => {
 });
 
 /* ======================================================
-   🔐 VERIFY PAYMENT
+   🔐 VERIFY PAYMENT (CLIENT SIDE)
 ====================================================== */
 app.post("/razorpay/verify", (req, res) => {
   try {
@@ -119,53 +169,6 @@ app.post("/razorpay/verify", (req, res) => {
     res.status(500).json({ error: "Verification failed" });
   }
 });
-
-/* ======================================================
-   🔔 RAZORPAY WEBHOOK
-====================================================== */
-app.post(
-  "/razorpay/webhook",
-  express.raw({ type: "application/json" }),
-  async (req, res) => {
-    try {
-      const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
-      const signature = req.headers["x-razorpay-signature"];
-
-      const expected = crypto
-        .createHmac("sha256", secret)
-        .update(req.body)
-        .digest("hex");
-
-      if (signature !== expected) {
-        return res.status(400).send("Invalid signature");
-      }
-
-      const event = JSON.parse(req.body.toString());
-
-      if (event.event === "payment.captured") {
-        const payment = event.payload.payment.entity;
-
-        const snap = await db
-          .collection("bookingRequests")
-          .where("razorpayOrderId", "==", payment.order_id)
-          .get();
-
-        snap.forEach((doc) => {
-          doc.ref.update({
-            paymentStatus: "paid",
-            razorpayPaymentId: payment.id,
-            paidAt: Timestamp.now(),
-          });
-        });
-      }
-
-      res.json({ status: "ok" });
-    } catch (err) {
-      console.error("🔥 Webhook error:", err.message);
-      res.status(500).send("Webhook failed");
-    }
-  }
-);
 
 /* ================= ROOT ================= */
 app.get("/", (req, res) => {
