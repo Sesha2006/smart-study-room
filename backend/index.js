@@ -1,7 +1,7 @@
 /**
- * 🚀 NORMAL NODE INDEX.JS
- * Auto system + Razorpay integration
- * Runs with npm start
+ * 🚀 SMART STUDY ROOM BACKEND
+ * Razorpay + Firebase
+ * Render compatible
  */
 
 /* ================= LOAD ENV ================= */
@@ -14,25 +14,27 @@ const Razorpay = require("razorpay");
 const cors = require("cors");
 
 /* ================= FIREBASE ADMIN ================= */
-const { initializeApp, cert } = require("firebase-admin/app");
-const { getFirestore, Timestamp } = require("firebase-admin/firestore");
-const { getDatabase } = require("firebase-admin/database");
+const admin = require("firebase-admin");
 
-/* ================= SERVICE ACCOUNT ================= */
-const serviceAccount = require("./serviceAccountKey.json");
+/* ================= FIREBASE INIT (ENV BASED) ================= */
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert({
+      projectId: process.env.FIREBASE_PROJECT_ID,
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
+    }),
+    databaseURL: process.env.FIREBASE_DATABASE_URL,
+  });
+}
 
-/* ================= FIREBASE INIT ================= */
-initializeApp({
-  credential: cert(serviceAccount),
-  databaseURL: "https://smart-study-room-aiot-default-rtdb.firebaseio.com/",
-});
-
-const db = getFirestore();
-const rtdb = getDatabase();
+const db = admin.firestore();
+const rtdb = admin.database();
+const { Timestamp } = admin.firestore;
 
 /* ================= EXPRESS APP ================= */
 const app = express();
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 
 /* ================= CORS ================= */
 app.use(
@@ -51,21 +53,20 @@ app.use(
   })
 );
 
-/* ⚠️ JSON parser (NOT for webhook) */
+/* JSON parser (NOT for webhook) */
 app.use(express.json());
 
 /* ================= ENV CHECK ================= */
 if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
-  console.error("❌ Razorpay backend ENV keys missing");
+  console.error("❌ Razorpay ENV keys missing");
   process.exit(1);
 }
 
 if (!process.env.RAZORPAY_WEBHOOK_SECRET) {
-  console.error("❌ Razorpay WEBHOOK secret missing");
-  process.exit(1);
+  console.warn("⚠️ Razorpay webhook not configured yet");
 }
 
-console.log("✅ Razorpay BACKEND keys loaded");
+console.log("✅ Razorpay backend keys loaded");
 
 /* ================= RAZORPAY INIT ================= */
 const razorpay = new Razorpay({
@@ -105,7 +106,7 @@ app.post("/razorpay/create-order", async (req, res) => {
 });
 
 /* ======================================================
-   🔐 VERIFY PAYMENT (FRONTEND CHECK)
+   🔐 VERIFY PAYMENT
 ====================================================== */
 app.post("/razorpay/verify", (req, res) => {
   try {
@@ -134,18 +135,21 @@ app.post("/razorpay/verify", (req, res) => {
 });
 
 /* ======================================================
-   🔔 RAZORPAY WEBHOOK (SOURCE OF TRUTH)
+   🔔 RAZORPAY WEBHOOK
 ====================================================== */
 app.post(
   "/razorpay/webhook",
   express.raw({ type: "application/json" }),
   async (req, res) => {
     try {
-      const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+      if (!process.env.RAZORPAY_WEBHOOK_SECRET) {
+        return res.status(200).send("Webhook ignored");
+      }
+
       const signature = req.headers["x-razorpay-signature"];
 
       const expected = crypto
-        .createHmac("sha256", secret)
+        .createHmac("sha256", process.env.RAZORPAY_WEBHOOK_SECRET)
         .update(req.body)
         .digest("hex");
 
@@ -163,17 +167,9 @@ app.post(
           .where("razorpayOrderId", "==", payment.order_id)
           .get();
 
-        if (snap.empty) {
-          console.warn(
-            "⚠️ No booking found for Razorpay order:",
-            payment.order_id
-          );
-        }
-
         snap.forEach((doc) => {
           doc.ref.update({
             paymentStatus: "paid",
-            paymentProvider: "razorpay",
             razorpayPaymentId: payment.id,
             paidAt: Timestamp.now(),
           });
@@ -203,55 +199,25 @@ async function autoSystemManager() {
       .where("status", "==", "pending")
       .get();
 
-    if (!bookingSnap.empty) {
-      const batch = db.batch();
+    const batch = db.batch();
 
-      bookingSnap.forEach((doc) => {
-        const data = doc.data();
-        if (!data.createdAt) return;
+    bookingSnap.forEach((doc) => {
+      const data = doc.data();
+      if (!data.createdAt) return;
 
-        const diff =
-          (now.toMillis() - data.createdAt.toMillis()) / 60000;
+      const diff =
+        (now.toMillis() - data.createdAt.toMillis()) / 60000;
 
-        if (diff >= BOOKING_APPROVAL_MINUTES) {
-          batch.update(doc.ref, {
-            status: "approved",
-            approvedAt: now,
-            autoApproved: true,
-          });
-        }
-      });
+      if (diff >= BOOKING_APPROVAL_MINUTES) {
+        batch.update(doc.ref, {
+          status: "approved",
+          approvedAt: now,
+          autoApproved: true,
+        });
+      }
+    });
 
-      await batch.commit();
-    }
-
-    const studentSnap = await db
-      .collection("users")
-      .where("role", "==", "student")
-      .where("status", "==", "pending")
-      .get();
-
-    if (!studentSnap.empty) {
-      const batch = db.batch();
-
-      studentSnap.forEach((doc) => {
-        const data = doc.data();
-        if (!data.createdAt) return;
-
-        const diff =
-          (now.toMillis() - data.createdAt.toMillis()) / 60000;
-
-        if (diff >= STUDENT_CANCEL_MINUTES) {
-          batch.update(doc.ref, {
-            status: "rejected",
-            rejectedAt: now,
-            autoCancelled: true,
-          });
-        }
-      });
-
-      await batch.commit();
-    }
+    await batch.commit();
   } catch (err) {
     console.error("🔥 Auto system error:", err.message);
   } finally {
@@ -261,7 +227,7 @@ async function autoSystemManager() {
 
 /* ================= ROOT ================= */
 app.get("/", (req, res) => {
-  res.send("✅ Razorpay + Auto System backend running");
+  res.send("✅ Smart Study Room backend running");
 });
 
 /* ================= START ================= */
