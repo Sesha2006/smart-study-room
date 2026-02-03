@@ -1,15 +1,13 @@
-const { initializeApp, cert } = require("firebase-admin/app");
-const { getFirestore } = require("firebase-admin/firestore");
-const { getDatabase } = require("firebase-admin/database");
+import admin from "firebase-admin";
 
-const serviceAccount = require("../serviceAccountKey.json");
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert({
+      projectId: process.env.FIREBASE_PROJECT_ID,
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
+    }),
+  });
+}
 
-initializeApp({
-  credential: cert(serviceAccount),
-  databaseURL: "https://smart-study-room-aiot-default-rtdb.firebaseio.com",
-});
-
-module.exports = {
-  db: getFirestore(),
-  rtdb: getDatabase(),
-};
+export default admin;

@@ -1,5 +1,5 @@
 // ⚛️ React
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import "../App.css";
 
 // 🌐 Contexts
@@ -19,6 +19,8 @@ const PRICES = {
   long: 60,
 };
 
+const MAX_CAPACITY = 6;
+
 /* ================= SLOT GENERATOR ================= */
 const pad = (n) => n.toString().padStart(2, "0");
 
@@ -33,7 +35,6 @@ const generateSlots = (startHour, endHour, durationMinutes) => {
     const eh = Math.floor((current + durationMinutes) / 60);
     const em = (current + durationMinutes) % 60;
 
-    // ✅ FIXED
     slots.push(`${pad(sh)}:${pad(sm)} - ${pad(eh)}:${pad(em)}`);
     current += durationMinutes;
   }
@@ -64,6 +65,14 @@ export default function RequestRoom() {
 
   const amount = PRICES[slotType] || 0;
 
+  const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+
+  /* ================= RESET ROOM ON DATE/TIME CHANGE ================= */
+  useEffect(() => {
+    setRoomId("");
+    setRoomName("");
+  }, [date, time]);
+
   /* ================= VALID TIME ================= */
   const validTimeSlots = useMemo(() => {
     if (!date || !slotType) return [];
@@ -81,7 +90,6 @@ export default function RequestRoom() {
       const now = new Date();
       return slots.filter((slot) => {
         const start = slot.split(" - ")[0];
-        // ✅ FIXED
         return new Date(`${date}T${start}`) > now;
       });
     }
@@ -114,6 +122,7 @@ export default function RequestRoom() {
       paymentStatus: paymentMeta.status,
       razorpayOrderId: paymentMeta.orderId,
       razorpayPaymentId: paymentMeta.paymentId,
+      paidAt: serverTimestamp(),
 
       refundStatus: "not_initiated",
       status: "pending",
@@ -121,6 +130,13 @@ export default function RequestRoom() {
     });
 
     setSuccess("✅ Booking submitted successfully");
+
+    setDate("");
+    setSlotType("");
+    setTime("");
+    setRoomId("");
+    setRoomName("");
+    setMembers(1);
   };
 
   /* ================= PAYMENT ================= */
@@ -133,21 +149,21 @@ export default function RequestRoom() {
       return;
     }
 
-    const razorpayKey = process.env.REACT_APP_RAZORPAY_KEY_ID;
-
-    if (!razorpayKey) {
-      setError("Razorpay key missing. Check frontend .env and restart.");
+    if (!BACKEND_URL) {
+      setError("Backend URL missing (.env)");
       return;
     }
 
-    if (!window.Razorpay) {
-      setError("Razorpay SDK not loaded");
+    const razorpayKey = process.env.REACT_APP_RAZORPAY_KEY_ID;
+
+    if (!razorpayKey || typeof window.Razorpay === "undefined") {
+      setError("Razorpay not loaded");
       return;
     }
 
     try {
       const res = await fetch(
-        "http://localhost:5000/razorpay/create-order",
+        `${BACKEND_URL}/razorpay/create-order`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -227,7 +243,7 @@ export default function RequestRoom() {
         <input
           type="number"
           min="1"
-          max="6"
+          max={MAX_CAPACITY}
           value={members}
           onChange={(e) => setMembers(Number(e.target.value))}
         />
