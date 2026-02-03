@@ -1,15 +1,62 @@
-const { initializeApp, cert } = require("firebase-admin/app");
-const { getFirestore } = require("firebase-admin/firestore");
-const { getDatabase } = require("firebase-admin/database");
+const admin = require("firebase-admin");
 
-const serviceAccount = require("../serviceAccountKey.json");
+let credential;
 
-initializeApp({
-  credential: cert(serviceAccount),
-  databaseURL: "https://smart-study-room-aiot-default-rtdb.firebaseio.com",
-});
+// Render / Production → ENV
+if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+  credential = admin.credential.cert(
+    JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
+  );
+}
+// Local → file
+else {
+  credential = admin.credential.cert(
+    require("../serviceAccountKey.json")
+  );
+}
 
-module.exports = {
-  db: getFirestore(),
-  rtdb: getDatabase(),
-};
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential,
+    databaseURL:
+      "https://smart-study-room-aiot-default-rtdb.firebaseio.com/",
+  });
+
+  console.log("🔥 Firebase Admin initialized");
+}
+
+const db = admin.firestore();
+const rtdb = admin.database();
+
+module.exports = { admin, db, rtdb };
+const admin = require("firebase-admin");
+
+let credential;
+
+// Render / Production → ENV
+if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+  credential = admin.credential.cert(
+    JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
+  );
+}
+// Local → file
+else {
+  credential = admin.credential.cert(
+    require("../serviceAccountKey.json")
+  );
+}
+
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential,
+    databaseURL:
+      "https://smart-study-room-aiot-default-rtdb.firebaseio.com/",
+  });
+
+  console.log("🔥 Firebase Admin initialized");
+}
+
+const db = admin.firestore();
+const rtdb = admin.database();
+
+module.exports = { admin, db, rtdb };
