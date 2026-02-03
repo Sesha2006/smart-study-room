@@ -1,0 +1,128 @@
+/* ===============================
+   MAIN APP NAVBAR (AFTER LOGIN)
+================================ */
+
+.navbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+
+  padding: 18px 48px;
+  background: rgba(12, 16, 34, 0.92);
+  backdrop-filter: blur(14px);
+
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* App title */
+.navbar h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: 0.3px;
+}
+
+/* Links container */
+.navbar-links {
+  display: flex;
+  align-items: center;
+  gap: 26px;
+}
+
+/* Nav links */
+.navbar a {
+  position: relative;
+  text-decoration: none;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 14.5px;
+  font-weight: 500;
+  transition: color 0.25s ease;
+}
+
+/* Hover */
+.navbar a:hover {
+  color: #00eaff;
+}
+
+/* Active link (react-router adds .active manually if you want later) */
+.navbar a.active {
+  color: #00eaff;
+}
+
+.navbar a.active::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -6px;
+  width: 100%;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #00eaff, #5f2cfa);
+}
+
+/* Logout button */
+.logout-btn {
+  margin-left: 12px;
+  padding: 8px 20px;
+
+  border-radius: 10px;
+  border: 1px solid rgba(255, 77, 77, 0.45);
+  background: rgba(255, 77, 77, 0.08);
+
+  color: #ff5c5c;
+  font-size: 13.5px;
+  font-weight: 600;
+
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.logout-btn:hover {
+  background: rgba(255, 77, 77, 0.18);
+  box-shadow: 0 0 12px rgba(255, 77, 77, 0.35);
+}
+
+/* ===============================
+   AUTH NAVBAR (LOGIN / SIGNUP)
+================================ */
+
+.auth-navbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+
+  padding: 22px 56px;
+  background: transparent;
+}
+
+/* Auth app title */
+.auth-navbar h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: 0.4px;
+}
+
+/* Auth links */
+.auth-navbar a {
+  margin-left: 26px;
+  text-decoration: none;
+  color: #00eaff;
+  font-size: 14px;
+  font-weight: 600;
+  transition: opacity 0.25s ease;
+}
+
+.auth-navbar a:hover {
+  opacity: 0.75;
+}

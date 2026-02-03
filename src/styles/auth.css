@@ -1,0 +1,41 @@
+.auth-navbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 22px 48px;
+  position: absolute;
+  width: 100%;
+  top: 0;
+  left: 0;
+  z-index: 10;
+}
+
+.auth-navbar h2 {
+  color: white;
+  font-weight: 700;
+}
+
+.auth-navbar a {
+  margin-left: 24px;
+  color: #00eaff;
+  text-decoration: none;
+  font-weight: 600;
+  transition: opacity 0.3s;
+}
+
+.auth-navbar a:hover {
+  opacity: 0.8;
+  text-decoration: underline;
+}
+
+@media (max-width: 768px) {
+  .auth-navbar {
+    padding: 15px 20px;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .auth-navbar a {
+    margin-left: 15px;
+  }
+}

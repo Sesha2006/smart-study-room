@@ -1,38 +1,266 @@
-.App {
+/* ===============================
+   GLOBAL RESET
+================================ */
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow-x: hidden;      /* 🚫 no horizontal scrollbar */
+  overflow-y: auto;        /* ✅ single vertical scrollbar */
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  background: #0a0f1f;
+  color: #ffffff;
+}
+
+/* ===============================
+   PAGE
+================================ */
+.page {
+  min-height: 100vh;
+  padding: 24px 32px;      /* ✅ proper left & right margin */
+}
+
+/* ===============================
+   HERO
+================================ */
+.hero {
+  padding: 56px;
+  margin-bottom: 32px;
+  border-radius: 20px;
+  text-align: center;
+  background: linear-gradient(135deg, #5f2cfa, #00c6ff);
+}
+
+/* ===============================
+   STATS GRID
+================================ */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  margin-bottom: 32px;
+}
+
+/* ===============================
+   GLASS CARD
+================================ */
+.glass-card {
+  padding: 24px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 0 24px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* ===============================
+   STATS
+================================ */
+.stat-card {
   text-align: center;
 }
 
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
+.stat {
+  font-size: 2.3rem;
+  font-weight: 700;
+  color: #00eaff;
+  margin-top: 10px;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
+/* ===============================
+   DASHBOARD LAYOUT
+================================ */
+.dashboard-layout {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 24px;
+  align-items: stretch;
+}
+
+/* ===============================
+   LEFT COLUMN
+================================ */
+.student-left {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* ===============================
+   ACTION GRID
+================================ */
+.action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+.action-card {
+  padding: 22px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+  transition: all 0.25s ease;
+  min-height: 140px;
+}
+
+.action-card:hover {
+  transform: translateY(-4px);
+  background: linear-gradient(135deg, #4f46e5, #06b6d4);
+}
+
+/* ===============================
+   RIGHT COLUMN (QUICK INFO)
+================================ */
+.student-right {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  gap: 20px;
+}
+
+.student-right .glass-card {
+  height: auto;
+}
+
+/* ===============================
+   TEXT
+================================ */
+.success-text {
+  color: #22c55e;
+  font-weight: 600;
+}
+
+/* ===============================
+   BUTTON ROW
+================================ */
+.btn-row {
+  display: flex;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.primary-btn,
+.danger-btn {
+  flex: 1;
+  padding: 12px;
+  border-radius: 12px;
+  border: none;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.primary-btn {
+  background: linear-gradient(90deg, #00c6ff, #7f5cff);
+  color: #ffffff;
+}
+
+.danger-btn {
+  background: linear-gradient(90deg, #ff4d4d, #ff1a1a);
+  color: #ffffff;
+}
+
+/* ===============================
+   LOGIN / SIGNUP
+================================ */
+.login-page {
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-box {
+  width: 360px;
+  padding: 40px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(16px);
+}
+
+.login-box input {
+  width: 100%;
+  padding: 12px;
+  margin-bottom: 14px;
+  border-radius: 10px;
+  border: none;
+}
+
+.login-box button {
+  width: 100%;
+  padding: 12px;
+  border-radius: 20px;
+  border: none;
+  background: linear-gradient(135deg, #00c6ff, #5f2cfa);
+  color: white;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+/* ===============================
+   RESPONSIVE
+================================ */
+@media (max-width: 900px) {
+  .card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .action-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .student-right {
+    grid-template-rows: auto;
+  }
+
+  .page {
+    padding: 16px;
   }
 }
 
-.App-header {
-  background-color: #282c34;
-  min-height: 100vh;
+.form-card {
+  max-width: 420px;
+  margin: auto;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
+  gap: 14px;
+}
+
+.form-card label {
+  font-size: 14px;
+  opacity: 0.85;
+}
+
+.form-card input,
+.form-card select {
+  padding: 12px;
+  border-radius: 10px;
+  border: none;
+  background: rgba(255,255,255,0.1);
   color: white;
 }
 
-.App-link {
-  color: #61dafb;
+.form-card select option {
+  color: black;
 }
 
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+.error-text {
+  color: #ff4d4d;
+  font-weight: 600;
+}
+
+.success-text {
+  color: #22c55e;
+  font-weight: 600;
 }
