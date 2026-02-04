@@ -13,13 +13,26 @@ const crypto = require("crypto");
 const Razorpay = require("razorpay");
 const cors = require("cors");
 
-/* ================= FIREBASE ================= */
-const { admin, db, rtdb } = require("./firebase/admin");
-const { Timestamp } = admin.firestore;
+/* ================= FIREBASE ADMIN ================= */
+const { initializeApp, cert } = require("firebase-admin/app");
+const { getFirestore, Timestamp } = require("firebase-admin/firestore");
+const { getDatabase } = require("firebase-admin/database");
+
+/* ================= SERVICE ACCOUNT ================= */
+const serviceAccount = require("./serviceAccountKey.json");
+
+/* ================= FIREBASE INIT ================= */
+initializeApp({
+  credential: cert(serviceAccount),
+  databaseURL: "https://smart-study-room-aiot-default-rtdb.firebaseio.com/",
+});
+
+const db = getFirestore();
+const rtdb = getDatabase();
 
 /* ================= EXPRESS APP ================= */
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = 5000;
 
 /* ================= CORS ================= */
 app.use(
@@ -37,6 +50,9 @@ app.use(
     ],
   })
 );
+
+/* ⚠️ JSON parser (NOT for webhook) */
+app.use(express.json());
 
 /* ================= ENV CHECK ================= */
 if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
@@ -59,63 +75,10 @@ const razorpay = new Razorpay({
 
 /* ================= CONFIG ================= */
 const BOOKING_APPROVAL_MINUTES = 5;
+const STUDENT_CANCEL_MINUTES = 5;
 
 /* ================= AUTO SYSTEM LOCK ================= */
 let isRunning = false;
-
-/* ======================================================
-   🔔 RAZORPAY WEBHOOK (RAW BODY — MUST BE FIRST)
-====================================================== */
-app.post(
-  "/razorpay/webhook",
-  express.raw({ type: "application/json" }),
-  async (req, res) => {
-    try {
-      const signature = req.headers["x-razorpay-signature"];
-      const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
-
-      const expectedSignature = crypto
-        .createHmac("sha256", secret)
-        .update(req.body)
-        .digest("hex");
-
-      if (signature !== expectedSignature) {
-        return res.status(400).send("Invalid signature");
-      }
-
-      const event = JSON.parse(req.body.toString());
-
-      if (event.event === "payment.captured") {
-        const payment = event.payload.payment.entity;
-
-        const snap = await db
-          .collection("bookingRequests")
-          .where("razorpayOrderId", "==", payment.order_id)
-          .get();
-
-        const batch = db.batch();
-
-        snap.forEach((doc) => {
-          batch.update(doc.ref, {
-            paymentStatus: "paid",
-            razorpayPaymentId: payment.id,
-            paidAt: Timestamp.now(),
-          });
-        });
-
-        await batch.commit();
-      }
-
-      res.json({ status: "ok" });
-    } catch (err) {
-      console.error("🔥 Webhook error:", err.message);
-      res.status(500).send("Webhook failed");
-    }
-  }
-);
-
-/* ⚠️ JSON parser — AFTER webhook */
-app.use(express.json());
 
 /* ======================================================
    💳 CREATE RAZORPAY ORDER
@@ -142,7 +105,7 @@ app.post("/razorpay/create-order", async (req, res) => {
 });
 
 /* ======================================================
-   🔐 VERIFY PAYMENT (CLIENT SIDE)
+   🔐 VERIFY PAYMENT (FRONTEND CHECK)
 ====================================================== */
 app.post("/razorpay/verify", (req, res) => {
   try {
@@ -170,12 +133,64 @@ app.post("/razorpay/verify", (req, res) => {
   }
 });
 
-/* ================= ROOT ================= */
-app.get("/", (req, res) => {
-  res.send("✅ Razorpay + Auto System backend running");
-});
+/* ======================================================
+   🔔 RAZORPAY WEBHOOK (SOURCE OF TRUTH)
+====================================================== */
+app.post(
+  "/razorpay/webhook",
+  express.raw({ type: "application/json" }),
+  async (req, res) => {
+    try {
+      const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+      const signature = req.headers["x-razorpay-signature"];
 
-/* ================= AUTO SYSTEM ================= */
+      const expected = crypto
+        .createHmac("sha256", secret)
+        .update(req.body)
+        .digest("hex");
+
+      if (signature !== expected) {
+        return res.status(400).send("Invalid signature");
+      }
+
+      const event = JSON.parse(req.body.toString());
+
+      if (event.event === "payment.captured") {
+        const payment = event.payload.payment.entity;
+
+        const snap = await db
+          .collection("bookingRequests")
+          .where("razorpayOrderId", "==", payment.order_id)
+          .get();
+
+        if (snap.empty) {
+          console.warn(
+            "⚠️ No booking found for Razorpay order:",
+            payment.order_id
+          );
+        }
+
+        snap.forEach((doc) => {
+          doc.ref.update({
+            paymentStatus: "paid",
+            paymentProvider: "razorpay",
+            razorpayPaymentId: payment.id,
+            paidAt: Timestamp.now(),
+          });
+        });
+      }
+
+      res.json({ status: "ok" });
+    } catch (err) {
+      console.error("🔥 Webhook error:", err.message);
+      res.status(500).send("Webhook failed");
+    }
+  }
+);
+
+/* ======================================================
+   ⏱ AUTO SYSTEM MANAGER
+====================================================== */
 async function autoSystemManager() {
   if (isRunning) return;
   isRunning = true;
@@ -183,30 +198,60 @@ async function autoSystemManager() {
   const now = Timestamp.now();
 
   try {
-    const snap = await db
+    const bookingSnap = await db
       .collection("bookingRequests")
       .where("status", "==", "pending")
       .get();
 
-    const batch = db.batch();
+    if (!bookingSnap.empty) {
+      const batch = db.batch();
 
-    snap.forEach((doc) => {
-      const data = doc.data();
-      if (!data.createdAt) return;
+      bookingSnap.forEach((doc) => {
+        const data = doc.data();
+        if (!data.createdAt) return;
 
-      const diff =
-        (now.toMillis() - data.createdAt.toMillis()) / 60000;
+        const diff =
+          (now.toMillis() - data.createdAt.toMillis()) / 60000;
 
-      if (diff >= BOOKING_APPROVAL_MINUTES) {
-        batch.update(doc.ref, {
-          status: "approved",
-          autoApproved: true,
-          approvedAt: now,
-        });
-      }
-    });
+        if (diff >= BOOKING_APPROVAL_MINUTES) {
+          batch.update(doc.ref, {
+            status: "approved",
+            approvedAt: now,
+            autoApproved: true,
+          });
+        }
+      });
 
-    await batch.commit();
+      await batch.commit();
+    }
+
+    const studentSnap = await db
+      .collection("users")
+      .where("role", "==", "student")
+      .where("status", "==", "pending")
+      .get();
+
+    if (!studentSnap.empty) {
+      const batch = db.batch();
+
+      studentSnap.forEach((doc) => {
+        const data = doc.data();
+        if (!data.createdAt) return;
+
+        const diff =
+          (now.toMillis() - data.createdAt.toMillis()) / 60000;
+
+        if (diff >= STUDENT_CANCEL_MINUTES) {
+          batch.update(doc.ref, {
+            status: "rejected",
+            rejectedAt: now,
+            autoCancelled: true,
+          });
+        }
+      });
+
+      await batch.commit();
+    }
   } catch (err) {
     console.error("🔥 Auto system error:", err.message);
   } finally {
@@ -214,9 +259,16 @@ async function autoSystemManager() {
   }
 }
 
-setInterval(autoSystemManager, 60 * 1000);
+/* ================= ROOT ================= */
+app.get("/", (req, res) => {
+  res.send("✅ Razorpay + Auto System backend running");
+});
 
 /* ================= START ================= */
+console.log("⏱ Auto system manager started");
+setInterval(autoSystemManager, 60 * 1000);
+
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
+

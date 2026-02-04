@@ -1,31 +1,24 @@
 # ==============================
-# Node / React
+# Node
 # ==============================
 node_modules/
 .pnp
 .pnp.js
 
-# Production build
-build/
-dist/
-
 # ==============================
-# Firebase / Environment
+# Environment files (DO NOT COMMIT)
 # ==============================
 .env
 .env.local
-.env.development.local
-.env.test.local
+.env.development
+.env.test
+.env.production
 .env.production.local
 
-# Firebase Admin SDK (🚨 VERY IMPORTANT)
+# ==============================
+# Firebase Admin SDK (CRITICAL)
+# ==============================
 serviceAccountKey.json
-
-# ==============================
-# Firebase Functions
-# ==============================
-functions/node_modules/
-functions/.env
 
 # ==============================
 # Logs
