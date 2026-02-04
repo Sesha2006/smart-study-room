@@ -18,13 +18,25 @@ const { initializeApp, cert } = require("firebase-admin/app");
 const { getFirestore, Timestamp } = require("firebase-admin/firestore");
 const { getDatabase } = require("firebase-admin/database");
 
-/* ================= SERVICE ACCOUNT ================= */
-const serviceAccount = require("./serviceAccountKey.json");
+/* ================= SERVICE ACCOUNT (LOCAL + RENDER SAFE) ================= */
+let serviceAccount;
+
+if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+  // ✅ Render / Production
+  serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+  console.log("🔥 Using Firebase credentials from ENV");
+} else {
+  // ✅ Local development
+  serviceAccount = require("./serviceAccountKey.json");
+  console.log("🔥 Using Firebase credentials from local file");
+}
 
 /* ================= FIREBASE INIT ================= */
 initializeApp({
   credential: cert(serviceAccount),
-  databaseURL: "https://smart-study-room-aiot-default-rtdb.firebaseio.com/",
+  databaseURL:
+    process.env.FIREBASE_DATABASE_URL ||
+    "https://smart-study-room-aiot-default-rtdb.firebaseio.com/",
 });
 
 const db = getFirestore();
@@ -32,7 +44,7 @@ const rtdb = getDatabase();
 
 /* ================= EXPRESS APP ================= */
 const app = express();
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 
 /* ================= CORS ================= */
 app.use(
@@ -163,13 +175,6 @@ app.post(
           .where("razorpayOrderId", "==", payment.order_id)
           .get();
 
-        if (snap.empty) {
-          console.warn(
-            "⚠️ No booking found for Razorpay order:",
-            payment.order_id
-          );
-        }
-
         snap.forEach((doc) => {
           doc.ref.update({
             paymentStatus: "paid",
@@ -203,55 +208,25 @@ async function autoSystemManager() {
       .where("status", "==", "pending")
       .get();
 
-    if (!bookingSnap.empty) {
-      const batch = db.batch();
+    const batch = db.batch();
 
-      bookingSnap.forEach((doc) => {
-        const data = doc.data();
-        if (!data.createdAt) return;
+    bookingSnap.forEach((doc) => {
+      const data = doc.data();
+      if (!data.createdAt) return;
 
-        const diff =
-          (now.toMillis() - data.createdAt.toMillis()) / 60000;
+      const diff =
+        (now.toMillis() - data.createdAt.toMillis()) / 60000;
 
-        if (diff >= BOOKING_APPROVAL_MINUTES) {
-          batch.update(doc.ref, {
-            status: "approved",
-            approvedAt: now,
-            autoApproved: true,
-          });
-        }
-      });
+      if (diff >= BOOKING_APPROVAL_MINUTES) {
+        batch.update(doc.ref, {
+          status: "approved",
+          approvedAt: now,
+          autoApproved: true,
+        });
+      }
+    });
 
-      await batch.commit();
-    }
-
-    const studentSnap = await db
-      .collection("users")
-      .where("role", "==", "student")
-      .where("status", "==", "pending")
-      .get();
-
-    if (!studentSnap.empty) {
-      const batch = db.batch();
-
-      studentSnap.forEach((doc) => {
-        const data = doc.data();
-        if (!data.createdAt) return;
-
-        const diff =
-          (now.toMillis() - data.createdAt.toMillis()) / 60000;
-
-        if (diff >= STUDENT_CANCEL_MINUTES) {
-          batch.update(doc.ref, {
-            status: "rejected",
-            rejectedAt: now,
-            autoCancelled: true,
-          });
-        }
-      });
-
-      await batch.commit();
-    }
+    await batch.commit();
   } catch (err) {
     console.error("🔥 Auto system error:", err.message);
   } finally {
@@ -271,4 +246,3 @@ setInterval(autoSystemManager, 60 * 1000);
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
-
