@@ -4,7 +4,6 @@
  * Runs with npm start
  */
 
-/* ================= LOAD ENV ================= */
 require("dotenv").config();
 
 /* ================= IMPORTS ================= */
@@ -16,29 +15,17 @@ const cors = require("cors");
 /* ================= FIREBASE ADMIN ================= */
 const { initializeApp, cert } = require("firebase-admin/app");
 const { getFirestore, Timestamp } = require("firebase-admin/firestore");
-const { getDatabase } = require("firebase-admin/database");
 
-/* ================= SERVICE ACCOUNT (LOCAL + RENDER SAFE) ================= */
-let serviceAccount;
-
-if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-  serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-  console.log("🔥 Using Firebase credentials from ENV");
-} else {
-  serviceAccount = require("./serviceAccountKey.json");
-  console.log("🔥 Using Firebase credentials from local file");
-}
+/* ================= SERVICE ACCOUNT ================= */
+const serviceAccount = require("./serviceAccountKey.json");
 
 /* ================= FIREBASE INIT ================= */
 initializeApp({
   credential: cert(serviceAccount),
-  databaseURL:
-    process.env.FIREBASE_DATABASE_URL ||
-    "https://smart-study-room-aiot-default-rtdb.firebaseio.com/",
+  databaseURL: "https://smart-study-room-aiot-default-rtdb.firebaseio.com/",
 });
 
 const db = getFirestore();
-const rtdb = getDatabase();
 
 /* ================= EXPRESS APP ================= */
 const app = express();
@@ -52,16 +39,11 @@ app.use(
       "https://smart-study-room-aiot.web.app",
       "https://smart-study-room-aiot.firebaseapp.com",
     ],
-    methods: ["GET", "POST"],
-    allowedHeaders: [
-      "Content-Type",
-      "X-Razorpay-Signature",
-      "x-razorpay-signature",
-    ],
   })
 );
 
-/* ⚠️ JSON parser (NOT for webhook) */
+/* ================= BODY PARSERS ================= */
+/* JSON parser for normal routes */
 app.use(express.json());
 
 /* ================= ENV CHECK ================= */
@@ -85,19 +67,15 @@ const razorpay = new Razorpay({
 
 /* ================= CONFIG ================= */
 const BOOKING_APPROVAL_MINUTES = 5;
+const STUDENT_CANCEL_MINUTES = 5;
 
 /* ================= AUTO SYSTEM LOCK ================= */
 let isRunning = false;
 
 /* ======================================================
-   🔹 API ROUTER (NEW – IMPORTANT)
-====================================================== */
-const apiRouter = express.Router();
-
-/* ======================================================
    💳 CREATE RAZORPAY ORDER
 ====================================================== */
-apiRouter.post("/razorpay/create-order", async (req, res) => {
+app.post("/razorpay/create-order", async (req, res) => {
   try {
     const { amount } = req.body;
 
@@ -121,7 +99,7 @@ apiRouter.post("/razorpay/create-order", async (req, res) => {
 /* ======================================================
    🔐 VERIFY PAYMENT
 ====================================================== */
-apiRouter.post("/razorpay/verify", (req, res) => {
+app.post("/razorpay/verify", (req, res) => {
   try {
     const {
       razorpay_order_id,
@@ -148,9 +126,9 @@ apiRouter.post("/razorpay/verify", (req, res) => {
 });
 
 /* ======================================================
-   🔔 RAZORPAY WEBHOOK
+   🔔 RAZORPAY WEBHOOK (RAW BODY ONLY)
 ====================================================== */
-apiRouter.post(
+app.post(
   "/razorpay/webhook",
   express.raw({ type: "application/json" }),
   async (req, res) => {
@@ -195,15 +173,9 @@ apiRouter.post(
   }
 );
 
-/* ================= REGISTER API ROUTER ================= */
-app.use("/api", apiRouter);
-
-/* ================= ROOT ================= */
-app.get("/", (req, res) => {
-  res.send("✅ Razorpay + Auto System backend running");
-});
-
-/* ================= AUTO SYSTEM ================= */
+/* ======================================================
+   ⏱ AUTO SYSTEM MANAGER
+====================================================== */
 async function autoSystemManager() {
   if (isRunning) return;
   isRunning = true;
@@ -211,14 +183,14 @@ async function autoSystemManager() {
   const now = Timestamp.now();
 
   try {
-    const snap = await db
+    const bookingSnap = await db
       .collection("bookingRequests")
       .where("status", "==", "pending")
       .get();
 
     const batch = db.batch();
 
-    snap.forEach((doc) => {
+    bookingSnap.forEach((doc) => {
       const data = doc.data();
       if (!data.createdAt) return;
 
@@ -242,9 +214,15 @@ async function autoSystemManager() {
   }
 }
 
-setInterval(autoSystemManager, 60 * 1000);
+/* ================= ROOT ================= */
+app.get("/", (req, res) => {
+  res.send("✅ Razorpay + Auto System backend running");
+});
 
 /* ================= START ================= */
+console.log("⏱ Auto system manager started");
+setInterval(autoSystemManager, 60 * 1000);
+
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
